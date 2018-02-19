@@ -3,6 +3,8 @@ import numpy
 import readVCF
 import argparse
 import sqlite3
+import time
+
 
 def construct_header(args):
     header={};
@@ -142,16 +144,17 @@ for line in open(args.rm):
     repeats.append([content[0],int(content[1])-args.d,int(content[2])+args.d ])
 
 c.executemany('INSERT INTO REP VALUES (?,?,?)',repeats)
-c.execute("CREATE INDEX check_rep on REP (chr,start,end)")
+c.execute("CREATE INDEX check_rep on REP (chr,start)")
 conn.commit()
 repeats=[]
 
 me_lines=[]
-c.execute("CREATE TABLE ME (chr TEXT, pos INT, idx INT, line TEXT)")
+c.execute("CREATE TABLE ME (chr TEXT, pos INT, idx INT)")
 lines=[]
 i=0
 
 #load the me file
+me_lines=[]
 for line in open(args.me):
     if line[0] == "#":
         continue
@@ -159,44 +162,52 @@ for line in open(args.me):
     content=line.strip().split()
     chr=content[0]
     pos=int(content[1])
-    lines.append([chr,pos,i,line.strip()])
+    lines.append([chr,pos,i])
+    me_lines.append(line.strip())
     i+=1
 
-c.executemany('INSERT INTO ME VALUES (?,?,?,?)',lines)
+c.executemany('INSERT INTO ME VALUES (?,?,?)',lines)
 c.execute("CREATE INDEX select_pos on ME (chr,pos,pos)")
 conn.commit()
+del lines
 
 skip=[]
 me_to_print=[]
 me_index=[]
+
 #match the repeats MEIs and sv calls
 for i in range(0,len(sv_lines)):
     found=False
     c.execute('SELECT EXISTS(SELECT start FROM REP WHERE chr == \'{}\' AND start < {} AND end > {}) '.format(sv_chr[i][1],sv_pos[i][1],sv_pos[i][1]))
     repeat=int(c.fetchone()[0])
     if repeat:
-        A='SELECT * FROM ME WHERE chr == \'{}\' AND pos < {} AND pos > {} '.format(sv_chr[i][0],sv_pos[i][0]+args.d,sv_pos[i][0]-args.d)
+        A='SELECT idx FROM ME WHERE chr == \'{}\' AND pos < {} AND pos > {} '.format(sv_chr[i][0],sv_pos[i][0]+args.d,sv_pos[i][0]-args.d)
             
         for hit in c.execute(A):
-
-            if not hit[-2] in me_index:
-                me_index.append(hit[-2])
-                content=hit[-1].split()
+            if not hit[0] in me_index:
+                me_index.append(hit[0])
+                sv_line=sv_lines[i]
+                content=me_lines[int(hit[0])].split()
                 content[7]+=";SVID={}".format(sv_id[i])
+                del content[8:]
+                content += sv_line.split("\t")[8:]
                 me_to_print.append("\t".join(content))
             found=True
 
     c.execute('SELECT EXISTS(SELECT start FROM REP WHERE chr == \'{}\' AND start < {} AND end > {} )'.format(sv_chr[i][0],sv_pos[i][0],sv_pos[i][0]))
     repeat=int(c.fetchone()[0])
     if repeat:
-        A='SELECT * FROM ME WHERE chr == \'{}\' AND pos < {} AND pos > {} '.format(sv_chr[i][1],sv_pos[i][1]+args.d,sv_pos[i][1]-args.d)            
+        A='SELECT idx FROM ME WHERE chr == \'{}\' AND pos < {} AND pos > {} '.format(sv_chr[i][1],sv_pos[i][1]+args.d,sv_pos[i][1]-args.d)            
         for hit in c.execute(A):
-
-            if not hit[-2] in me_index:
-                me_index.append(hit[-2])
-                content=hit[-1].split()
+            if not hit[0] in me_index:
+                me_index.append(hit[0])
+                sv_line=sv_lines[i]
+                content=me_lines[int(hit[0])].split()
                 content[7]+=";SVID={}".format(sv_id[i])
+                del content[8:]
+                content += sv_line.split("\t")[8:]
                 me_to_print.append("\t".join(content))
+            
             found=True
 
     if found:
