@@ -2,14 +2,17 @@ import argparse
 
 parser = argparse.ArgumentParser("""AnnotateFrq - add SVDB style FRQ and OCC tags to input vcf file""")
 parser.add_argument('--vcf', type=str, help="a vcf containing sv", required = True)
+parser.add_argument('--frq', type=str, help="frequency tag (default=FRQ)")
+parser.add_argument('--occ', type=str, help="occurances tag (default=OCC)")
+
 args = parser.parse_args()
 
 
 for line in open(args.vcf):
     if line[0] == "#":
         if "CHROM" in line:
-            print ("##INFO=<ID=OCC,Number=1,Type=Integer,Description=\"The number of occurances of the event in the database\">")
-            print ("##INFO=<ID=FRQ,Number=1,Type=Float,Description=\"The frequency of the event in the database\">")
+            print ("##INFO=<ID={},Number=1,Type=Integer,Description=\"The number of occurances of the event in the database\">".format(args.occ))
+            print ("##INFO=<ID={},Number=1,Type=Float,Description=\"The frequency of the event in the database\">".format(args.frq))
             print line.strip()
         else:
             print line.strip()
@@ -27,5 +30,5 @@ for line in open(args.vcf):
             
     if samples:
         FRQ=OCC/float(samples)
-    content[7]+=";OCC={};FRQ={}".format(OCC,round(FRQ,4))
+    content[7]+=";{}={};{}={}".format(args.occ,OCC,args.frq,round(FRQ,4))
     print "\t".join(content)

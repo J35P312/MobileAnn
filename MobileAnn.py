@@ -5,6 +5,23 @@ import argparse
 import sqlite3
 import time
 
+def merge_info(SV_line,ME_line):
+    merged={}
+    for entry in ME_line.split(";"):
+        merged[entry.split("=")[0]]=entry.split("=")[1]
+
+    for entry in SV_line.split(";"):
+        entry_id=entry.split("=")[0]
+        entry_content=entry.split("=")[1]
+
+        if not entry_id in merged and not entry_id in ["END","CIPOS","CIEND","MATEID","SVTYPE","SVLEN"]:
+            merged[entry_id]=entry_content
+
+    merged_info=[]
+    for entry in merged:
+            merged_info.append("{}={}".format(entry,merged[entry]))
+
+    return( ";".join(merged_info) )
 
 def construct_header(args):
     header={};
@@ -29,12 +46,12 @@ def construct_header(args):
                 if "##file" in line:
                     print line.strip()
                     continue
-
-            if(line[0] == "#"):
                 if("#CHROM\tPOS" in line):
                     columns=line.strip()
 
-                elif line[0] == line[1] and "=" in line:
+            if(line[0] == "#"):
+
+                if line[0] == line[1] and "=" in line:
                     if("ID=" in line and not "##contig=<ID=" in line):
                         field=line.split("=")[2].split(",")[0]
                         key= line.strip("#").split("=")[0]
@@ -96,7 +113,7 @@ parser = argparse.ArgumentParser("""MobileAnn - mobile element classification of
 parser.add_argument('--sv', type=str, help="a vcf containing sv", required = True)
 parser.add_argument('--me', type=str, help="a vcf containing the mobile elements", required = True)
 parser.add_argument('--rm', type=str, help="a repeat masker bed file (format:chr<tab>pos<tab>end<tab>repeat)", required = True)
-parser.add_argument('-d', type=int,default=100, help="maximum distance between sv call and mobile element/repeat (default=100)")
+parser.add_argument('-d', type=int,default=150, help="maximum distance between sv call and mobile element/repeat (default=150)")
 args = parser.parse_args()
 
 header=[]
@@ -128,11 +145,8 @@ for line in open(args.sv):
 sv_pos=numpy.array(sv_pos)
 
 #load the repats
-conn = sqlite3.connect(":memory:")
-c=conn.cursor()
-c.execute("CREATE TABLE REP (chr TEXT, start INT, end INT)")
 
-repeats=[]
+repeats={}
 first=True
 for line in open(args.rm):
     if line[0] == "#":
@@ -141,14 +155,16 @@ for line in open(args.rm):
         first=False
         continue
     content=line.strip().split()
-    repeats.append([content[0],int(content[1])-args.d,int(content[2])+args.d ])
+    if not content[0] in repeats:
+        repeats[content[0]] = []
+    repeats[content[0]].append([int(content[1])-args.d,int(content[2])+args.d])
 
-c.executemany('INSERT INTO REP VALUES (?,?,?)',repeats)
-c.execute("CREATE INDEX check_rep on REP (chr,start)")
-conn.commit()
-repeats=[]
+for chromosome in repeats:
+    repeats[chromosome]=numpy.array(repeats[chromosome])
 
 me_lines=[]
+conn = sqlite3.connect(":memory:")
+c=conn.cursor()
 c.execute("CREATE TABLE ME (chr TEXT, pos INT, idx INT)")
 lines=[]
 i=0
@@ -178,9 +194,10 @@ me_index=[]
 #match the repeats MEIs and sv calls
 for i in range(0,len(sv_lines)):
     found=False
-    c.execute('SELECT EXISTS(SELECT start FROM REP WHERE chr == \'{}\' AND start < {} AND end > {}) '.format(sv_chr[i][1],sv_pos[i][1],sv_pos[i][1]))
-    repeat=int(c.fetchone()[0])
-    if repeat:
+    repeat=[]
+    if sv_chr[i][1] in repeats:
+        repeat=repeats[sv_chr[i][1]][numpy.where( (repeats[sv_chr[i][1]][:,0] < sv_pos[i][1]) & (repeats[sv_chr[i][1]][:,1] > sv_pos[i][1]) )]
+    if len(repeat):
         A='SELECT idx FROM ME WHERE chr == \'{}\' AND pos < {} AND pos > {} '.format(sv_chr[i][0],sv_pos[i][0]+args.d,sv_pos[i][0]-args.d)
             
         for hit in c.execute(A):
@@ -188,21 +205,25 @@ for i in range(0,len(sv_lines)):
                 me_index.append(hit[0])
                 sv_line=sv_lines[i]
                 content=me_lines[int(hit[0])].split()
+                content[7]=merge_info(sv_lines[i].split("\t")[7],content[7])
                 content[7]+=";SVID={}".format(sv_id[i])
                 del content[8:]
                 content += sv_line.split("\t")[8:]
                 me_to_print.append("\t".join(content))
             found=True
 
-    c.execute('SELECT EXISTS(SELECT start FROM REP WHERE chr == \'{}\' AND start < {} AND end > {} )'.format(sv_chr[i][0],sv_pos[i][0],sv_pos[i][0]))
-    repeat=int(c.fetchone()[0])
-    if repeat:
+    repeat=[]
+    if sv_chr[i][0] in repeats:
+        repeat=repeats[sv_chr[i][0]][numpy.where( (repeats[sv_chr[i][0]][:,0] < sv_pos[i][1]) & (repeats[sv_chr[i][0]][:,1] > sv_pos[i][1]) )]
+    
+    if len(repeat):
         A='SELECT idx FROM ME WHERE chr == \'{}\' AND pos < {} AND pos > {} '.format(sv_chr[i][1],sv_pos[i][1]+args.d,sv_pos[i][1]-args.d)            
         for hit in c.execute(A):
             if not hit[0] in me_index:
                 me_index.append(hit[0])
                 sv_line=sv_lines[i]
                 content=me_lines[int(hit[0])].split()
+                content[7]=merge_info(sv_lines[i].split("\t")[7],content[7])
                 content[7]+=";SVID={}".format(sv_id[i])
                 del content[8:]
                 content += sv_line.split("\t")[8:]
