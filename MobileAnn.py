@@ -109,152 +109,261 @@ def construct_header(args):
     print columns
     return ()
 
-parser = argparse.ArgumentParser("""MobileAnn - mobile element classification of SV calls""")
-parser.add_argument('--sv', type=str, help="a vcf containing sv", required = True)
-parser.add_argument('--me', type=str, help="a vcf containing the mobile elements", required = True)
-parser.add_argument('--rm', type=str, help="a repeat masker bed file (format:chr<tab>pos<tab>end<tab>repeat)", required = True)
-parser.add_argument('-d', type=int,default=150, help="maximum distance between sv call and mobile element/repeat (default=150)")
-args = parser.parse_args()
+parser = argparse.ArgumentParser("""MobileAnn - Mobile element annotation""", add_help=False)
+parser.add_argument('--sv_annotate', help="annotate a sv vcf file", action='store_true')
+parser.add_argument('--me_annotate', help="annotate a Mobile element vcf file", action='store_true')
+parser.add_argument('--frq', help="add frequency tags to a multi sample vcf file",action='store_true' )
+args, unknown = parser.parse_known_args()
 
-header=[]
-variants=[]
+if args.me_annotate:
+    parser = argparse.ArgumentParser("""MobileAnn - Mobile element annotation""")
+    parser.add_argument('--me_annotate',  help="annotate a Mobile element vcf file", action='store_true')
+    parser.add_argument('--vcf', type=str, help="a mobile element vcf", required = True)
+    parser.add_argument('--medb', type=str, help="a mobile element vcf db (produced through the --frq command)", required = True)
+    parser.add_argument('-d', type=int,default=100, help="maximum distance between me call in the db and query (default=100)")
+    parser.add_argument('--frq_tag',default="FRQ", type=str, help="frequency tag (default=FRQ)")
+    parser.add_argument('--occ_tag',default="OCC" ,type=str, help="occurances tag (default=OCC)")
+    args = parser.parse_args()
 
-#construct and print the header
-construct_header(args)
+    #load the database
+    conn = sqlite3.connect(":memory:")
+    c=conn.cursor()
+    me_data=[]
+    c.execute("CREATE TABLE ME (chr TEXT, pos INT, type TEXT, count INT, frequency REAL)")
+    for line in open(args.medb):
+        if line[0] == "#":
+            continue
+        content=line.strip().split()
 
-#load the sv calls
-sv_pos=[]
-sv_chr=[]
-sv_lines=[]
-sv_id=[]
-contig_order=[]
-for line in open(args.sv):
-    if line[0] == "#":
-        continue
+        if ";OCC=" in line:
+            count=content[7].split("OCC=")[-1].split(";")[0]
+            frq=content[7].split("FRQ=")[-1].split(";")[0]
+            me_data.append([content[0],content[1],content[3],count,frq])
+
+    c.executemany('INSERT INTO ME VALUES (?,?,?,?,?)',me_data)
+    c.execute("CREATE INDEX select_pos on ME (chr,type,pos,pos)")
+    
+
+    #itterrate through the variants and annotate
+    for line in open(args.vcf):
+        if line[0] == "#":
+            if "CHROM" in line:
+                print ("##INFO=<ID={},Number=1,Type=Integer,Description=\"The number of occurances of the event in the database\">".format(args.occ_tag))
+                print ("##INFO=<ID={},Number=1,Type=Float,Description=\"The frequency of the event in the database\">".format(args.frq_tag))
+                print line.strip()
+            else:
+                print line.strip()
+            continue
+
+        frequency=0
+        count=0;
+
+        content=line.strip().split()
+
+        A='SELECT count, frequency FROM ME WHERE chr == \'{}\' AND type=\'{}\' AND pos < {} AND pos > {} '.format(content[0],content[3],int(content[1])+args.d,int(content[1])-args.d)            
+        for hit in c.execute(A):
+            occ=int(hit[0])
+            frq=float(hit[1])
+            if not frequency or frq < frequency:
+                count=occ
+                frequency=frq
+
+        content[7]+=";{}={};{}={}".format(args.occ_tag,count,args.frq_tag,frequency)
+        print "\t".join(content)
+
+
+        
+
+
+
+elif args.frq:
+    parser = argparse.ArgumentParser("""MobileAnn - Mobile element annotation""")
+    parser.add_argument('--frq', help="add frequency tags to a multi sample vcf file",action='store_true' )
+    parser.add_argument('--vcf', type=str, help="a mobile element vcf", required = True)
+    parser.add_argument('--frq_tag',default="FRQ" ,type=str, help="frequency tag (default=FRQ)")
+    parser.add_argument('--occ_tag',default="OCC", type=str, help="occurances tag (default=OCC)")
+    args = parser.parse_args()
+
+
+
+    for line in open(args.vcf):
+        if line[0] == "#":
+            if "CHROM" in line:
+                print ("##INFO=<ID={},Number=1,Type=Integer,Description=\"The number of occurances of the event in the database\">".format(args.occ_tag))
+                print ("##INFO=<ID={},Number=1,Type=Float,Description=\"The frequency of the event in the database\">".format(args.frq_tag))
+                print line.strip()
+            else:
+                print line.strip()
+            continue
+
+
+    
+        FRQ=0
+        OCC=0
+        content=line.strip().split()
+        samples=len(content)-9
+        for i in range(9,len(content)):
+            if not "0/0:" in content[i]:
+                OCC+=1
+            
+        if samples:
+            FRQ=OCC/float(samples)
+        content[7]+=";{}={};{}={}".format(args.occ_tag,OCC,args.frq_tag,round(FRQ,4))
+        print "\t".join(content)
+
+elif args.sv_annotate:
+    parser = argparse.ArgumentParser("""MobileAnn - Mobile element annotation""")
+    parser.add_argument('s', help="annotate a sv vcf file", action='store_true')
+    parser.add_argument('--sv', type=str, help="a vcf containing sv", required = True)
+    parser.add_argument('--me', type=str, help="a vcf containing the mobile elements", required = True)
+    parser.add_argument('--rm', type=str, help="a repeat masker bed file (format:chr<tab>pos<tab>end<tab>repeat)", required = True)
+    parser.add_argument('-d', type=int,default=150, help="maximum distance between sv call and mobile element/repeat (default=150)")
+    args = parser.parse_args()
+
+    header=[]
+    variants=[]
+
+    #construct and print the header
+    construct_header(args)
+
+    #load the sv calls
+    sv_pos=[]
+    sv_chr=[]
+    sv_lines=[]
+    sv_id=[]
+    contig_order=[]
+    for line in open(args.sv):
+        if line[0] == "#":
+            continue
+                    
+        chrA, posA, chrB, posB,event_type,INFO,format = readVCF.readVCFLine(line)
+    
+        if not chrA in contig_order:
+            contig_order.append(chrA)
+    
+        sv_pos.append([posA,posB])
+        sv_chr.append([chrA,chrB])
+        sv_lines.append(line.strip())
+        sv_id.append(line.split()[2])
+    
+    sv_pos=numpy.array(sv_pos)
+
+    #load the repats
+
+    repeats={}
+    first=True
+    for line in open(args.rm):
+        if line[0] == "#":
+            continue
+        if first:
+            first=False
+            continue
+        content=line.strip().split()
+        if not content[0] in repeats:
+            repeats[content[0]] = []
+        repeats[content[0]].append([int(content[1])-args.d,int(content[2])+args.d])
+    
+    for chromosome in repeats:
+        repeats[chromosome]=numpy.array(repeats[chromosome])
+
+    me_lines=[]
+    conn = sqlite3.connect(":memory:")
+    c=conn.cursor()
+    c.execute("CREATE TABLE ME (chr TEXT, pos INT, idx INT)")
+    lines=[]
+    i=0
+
+    #load the me file
+    me_lines=[]
+    for line in open(args.me):
+        if line[0] == "#":
+            continue
+    
+        content=line.strip().split()
+        chr=content[0]
+        pos=int(content[1])
+        lines.append([chr,pos,i])
+        me_lines.append(line.strip())
+        i+=1
+
+    c.executemany('INSERT INTO ME VALUES (?,?,?)',lines)
+    c.execute("CREATE INDEX select_pos on ME (chr,pos,pos)")
+    conn.commit()
+    del lines
+
+    skip=[]
+    me_to_print=[]
+    me_index=[]
+
+    #match the repeats MEIs and sv calls
+    for i in range(0,len(sv_lines)):
+        found=False
+        repeat=[]
+        if sv_chr[i][1] in repeats:
+            repeat=repeats[sv_chr[i][1]][numpy.where( (repeats[sv_chr[i][1]][:,0] < sv_pos[i][1]) & (repeats[sv_chr[i][1]][:,1] > sv_pos[i][1]) )]
+        if len(repeat):
+            A='SELECT idx FROM ME WHERE chr == \'{}\' AND pos < {} AND pos > {} '.format(sv_chr[i][0],sv_pos[i][0]+args.d,sv_pos[i][0]-args.d)
                 
-    chrA, posA, chrB, posB,event_type,INFO,format = readVCF.readVCFLine(line)
+            for hit in c.execute(A):
+                if not hit[0] in me_index:
+                    me_index.append(hit[0])
+                    sv_line=sv_lines[i]
+                    content=me_lines[int(hit[0])].split()
+                    content[7]=merge_info(sv_lines[i].split("\t")[7],content[7])
+                    content[7]+=";SVID={}".format(sv_id[i])
+                    del content[8:]
+                    content += sv_line.split("\t")[8:]
+                    me_to_print.append("\t".join(content))
+                found=True
 
-    if not chrA in contig_order:
-        contig_order.append(chrA)
+        repeat=[]
+        if sv_chr[i][0] in repeats:
+            repeat=repeats[sv_chr[i][0]][numpy.where( (repeats[sv_chr[i][0]][:,0] < sv_pos[i][1]) & (repeats[sv_chr[i][0]][:,1] > sv_pos[i][1]) )]
+        
+        if len(repeat):
+            A='SELECT idx FROM ME WHERE chr == \'{}\' AND pos < {} AND pos > {} '.format(sv_chr[i][1],sv_pos[i][1]+args.d,sv_pos[i][1]-args.d)            
+            for hit in c.execute(A):
+                if not hit[0] in me_index:
+                    me_index.append(hit[0])
+                    sv_line=sv_lines[i]
+                    content=me_lines[int(hit[0])].split()
+                    content[7]=merge_info(sv_lines[i].split("\t")[7],content[7])
+                    content[7]+=";SVID={}".format(sv_id[i])
+                    del content[8:]
+                    content += sv_line.split("\t")[8:]
+                    me_to_print.append("\t".join(content))
+                
+                found=True
 
-    sv_pos.append([posA,posB])
-    sv_chr.append([chrA,chrB])
-    sv_lines.append(line.strip())
-    sv_id.append(line.split()[2])
+        if found:
+            skip.append(i)
 
-sv_pos=numpy.array(sv_pos)
-
-#load the repats
-
-repeats={}
-first=True
-for line in open(args.rm):
-    if line[0] == "#":
-        continue
-    if first:
-        first=False
-        continue
-    content=line.strip().split()
-    if not content[0] in repeats:
-        repeats[content[0]] = []
-    repeats[content[0]].append([int(content[1])-args.d,int(content[2])+args.d])
-
-for chromosome in repeats:
-    repeats[chromosome]=numpy.array(repeats[chromosome])
-
-me_lines=[]
-conn = sqlite3.connect(":memory:")
-c=conn.cursor()
-c.execute("CREATE TABLE ME (chr TEXT, pos INT, idx INT)")
-lines=[]
-i=0
-
-#load the me file
-me_lines=[]
-for line in open(args.me):
-    if line[0] == "#":
-        continue
-    
-    content=line.strip().split()
-    chr=content[0]
-    pos=int(content[1])
-    lines.append([chr,pos,i])
-    me_lines.append(line.strip())
-    i+=1
-
-c.executemany('INSERT INTO ME VALUES (?,?,?)',lines)
-c.execute("CREATE INDEX select_pos on ME (chr,pos,pos)")
-conn.commit()
-del lines
-
-skip=[]
-me_to_print=[]
-me_index=[]
-
-#match the repeats MEIs and sv calls
-for i in range(0,len(sv_lines)):
-    found=False
-    repeat=[]
-    if sv_chr[i][1] in repeats:
-        repeat=repeats[sv_chr[i][1]][numpy.where( (repeats[sv_chr[i][1]][:,0] < sv_pos[i][1]) & (repeats[sv_chr[i][1]][:,1] > sv_pos[i][1]) )]
-    if len(repeat):
-        A='SELECT idx FROM ME WHERE chr == \'{}\' AND pos < {} AND pos > {} '.format(sv_chr[i][0],sv_pos[i][0]+args.d,sv_pos[i][0]-args.d)
-            
-        for hit in c.execute(A):
-            if not hit[0] in me_index:
-                me_index.append(hit[0])
-                sv_line=sv_lines[i]
-                content=me_lines[int(hit[0])].split()
-                content[7]=merge_info(sv_lines[i].split("\t")[7],content[7])
-                content[7]+=";SVID={}".format(sv_id[i])
-                del content[8:]
-                content += sv_line.split("\t")[8:]
-                me_to_print.append("\t".join(content))
-            found=True
-
-    repeat=[]
-    if sv_chr[i][0] in repeats:
-        repeat=repeats[sv_chr[i][0]][numpy.where( (repeats[sv_chr[i][0]][:,0] < sv_pos[i][1]) & (repeats[sv_chr[i][0]][:,1] > sv_pos[i][1]) )]
-    
-    if len(repeat):
-        A='SELECT idx FROM ME WHERE chr == \'{}\' AND pos < {} AND pos > {} '.format(sv_chr[i][1],sv_pos[i][1]+args.d,sv_pos[i][1]-args.d)            
-        for hit in c.execute(A):
-            if not hit[0] in me_index:
-                me_index.append(hit[0])
-                sv_line=sv_lines[i]
-                content=me_lines[int(hit[0])].split()
-                content[7]=merge_info(sv_lines[i].split("\t")[7],content[7])
-                content[7]+=";SVID={}".format(sv_id[i])
-                del content[8:]
-                content += sv_line.split("\t")[8:]
-                me_to_print.append("\t".join(content))
-            
-            found=True
-
-    if found:
-        skip.append(i)
-
-#order the calls
-variants={}
-for me in me_to_print:
-    content=me.split()
-    if not content[0] in variants:
-        variants[content[0]]=[]
-    content[1]=int(content[1])
-    variants[content[0]].append(content)
-
-skip=set(skip)
-for i in range(0,len(sv_lines)):
-    if not i in skip:
-        content=sv_lines[i].split()
+    #order the calls
+    variants={}
+    for me in me_to_print:
+        content=me.split()
         if not content[0] in variants:
             variants[content[0]]=[]
-    content[1]=int(content[1])
-    variants[content[0]].append(content)
+        content[1]=int(content[1])
+        variants[content[0]].append(content)
 
-#print sorted calls
-for chromosome in contig_order:
-    for variant in sorted(variants[chromosome], key=lambda x: x[1]):
-        variant[1]=str(variant[1])
-        print "\t".join(variant)
+    skip=set(skip)
+    for i in range(0,len(sv_lines)):
+        if not i in skip:
+            content=sv_lines[i].split()
+            if not content[0] in variants:
+                variants[content[0]]=[]
+        content[1]=int(content[1])
+        variants[content[0]].append(content)
+    
+    #print sorted calls
+    for chromosome in contig_order:
+        for variant in sorted(variants[chromosome], key=lambda x: x[1]):
+            variant[1]=str(variant[1])
+            print "\t".join(variant)
+
+else:
+    print "error"
+
+
 
