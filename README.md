@@ -6,7 +6,7 @@ MobileAnn consists of three modules. The SV annotation module, ME annotatation m
 The SV annotatation module compares SV calls to mobile element calls, and changes the SV calls into ME calls. The purpose of this module is to re-classify SV calls that represent ME calls: Many SV callers are able to detect Mobile elements, but will classify these events as translocations or inversions. The SV-annotation module is run through the following command:
 
 
-    python MobileAnn.py --sv_annotate --sv_ --sv sv.vcf --me me.vcf --rm repeats > updated_sv.vcf
+    python MobileAnn.py --sv_annotate --sv_ --sv sv.vcf --db me.vcf --rm repeats > updated_sv.vcf
 
 the mobile element vcf (me.vcf) may be produced using MELT or similar callers.
 

@@ -37,7 +37,7 @@ def construct_header(args):
     first=True
     first_vcf_header=""
     columns=""
-    for vcf in [args.sv,args.me]:
+    for vcf in [args.sv,args.db]:
         for line in open(vcf):
             if first:
                 if "source=" in line:
@@ -179,6 +179,7 @@ if args.me_annotate:
 elif args.frq:
     parser = argparse.ArgumentParser("""MobileAnn - Mobile element annotation""")
     parser.add_argument('--frq', help="add frequency tags to a multi sample vcf file",action='store_true' )
+    parser.add_argument('--per_chromosome', help="compute the count and frequencies per chromosome (per default, the count and frequencies are counted per individual)",action='store_true' )
     parser.add_argument('--vcf', type=str, help="a mobile element vcf", required = True)
     parser.add_argument('--frq_tag',default="FRQ" ,type=str, help="frequency tag (default=FRQ)")
     parser.add_argument('--occ_tag',default="OCC", type=str, help="occurances tag (default=OCC)")
@@ -201,11 +202,22 @@ elif args.frq:
         FRQ=0
         OCC=0
         content=line.strip().split()
-        samples=len(content)-9
-        for i in range(9,len(content)):
-            if not "0/0:" in content[i]:
-                OCC+=1
-            
+        if not args.per_chromosome:
+            samples=len(content)-9
+            for i in range(9,len(content)):
+                if not "0/0:" in content[i]:
+                   OCC+=1
+        else:
+            #NOTE: asssuming diploid genome i.e two chromosomes per individual
+            samples=2*(len(content)-9)
+            for i in range(9,len(content)):
+                if "0/0:" in content[i]:
+                   pass
+                elif "1/1" in content[i]:
+                   OCC+=2
+		else:
+                   OCC+=1
+
         if samples:
             FRQ=OCC/float(samples)
         content[7]+=";{}={};{}={}".format(args.occ_tag,OCC,args.frq_tag,round(FRQ,4))
@@ -213,9 +225,9 @@ elif args.frq:
 
 elif args.sv_annotate:
     parser = argparse.ArgumentParser("""MobileAnn - Mobile element annotation""")
-    parser.add_argument('s', help="annotate a sv vcf file", action='store_true')
+    parser.add_argument('--sv_annotate', help="annotate a sv vcf file", action='store_true')
     parser.add_argument('--sv', type=str, help="a vcf containing sv", required = True)
-    parser.add_argument('--me', type=str, help="a vcf containing the mobile elements", required = True)
+    parser.add_argument('--db', type=str, help="a vcf containing the mobile elements", required = True)
     parser.add_argument('--rm', type=str, help="a repeat masker bed file (format:chr<tab>pos<tab>end<tab>repeat)", required = True)
     parser.add_argument('-d', type=int,default=150, help="maximum distance between sv call and mobile element/repeat (default=150)")
     args = parser.parse_args()
@@ -275,7 +287,7 @@ elif args.sv_annotate:
 
     #load the me file
     me_lines=[]
-    for line in open(args.me):
+    for line in open(args.db):
         if line[0] == "#":
             continue
     
@@ -363,7 +375,10 @@ elif args.sv_annotate:
             print "\t".join(variant)
 
 else:
-    print "error"
+    print "Choose a module to generate a help message:"
+    print "MobileAnn.py --sv_annotate"
+    print "MobileAnn.py --me_annotate"
+    print "MobileAnn.py --frq"
 
 
 
