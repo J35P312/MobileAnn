@@ -7,12 +7,17 @@ import time
 
 def merge_info(SV_line,ME_line):
     merged={}
+    tags=set([])
     for entry in ME_line.split(";"):
         merged[entry.split("=")[0]]=entry.split("=")[1]
 
+
     for entry in SV_line.split(";"):
-        entry_id=entry.split("=")[0]
-        entry_content=entry.split("=")[1]
+        if "=" in entry:
+            entry_id=entry.split("=")[0]
+            entry_content=entry.split("=")[1]
+        else:
+            tags.add(entry)
 
         if not entry_id in merged and not entry_id in ["END","CIPOS","CIEND","MATEID","SVTYPE","SVLEN"]:
             merged[entry_id]=entry_content
@@ -20,6 +25,9 @@ def merge_info(SV_line,ME_line):
     merged_info=[]
     for entry in merged:
             merged_info.append("{}={}".format(entry,merged[entry]))
+
+    for tag in tags:
+        merged_info.append(tag)
 
     return( ";".join(merged_info) )
 
