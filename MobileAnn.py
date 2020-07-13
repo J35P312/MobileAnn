@@ -378,6 +378,9 @@ elif args.sv_annotate:
     
     #print sorted calls
     for chromosome in contig_order:
+        if not chromosome in variants:
+            continue
+
         for variant in sorted(variants[chromosome], key=lambda x: x[1]):
             variant[1]=str(variant[1])
             print ("\t".join(variant))
