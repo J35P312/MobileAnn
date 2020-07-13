@@ -9,8 +9,8 @@ def merge_info(SV_line,ME_line):
     merged={}
     tags=set([])
     for entry in ME_line.split(";"):
-        merged[entry.split("=")[0]]=entry.split("=")[1]
-
+        if "=" in entry:
+            merged[entry.split("=")[0]]=entry.split("=")[1]
 
     for entry in SV_line.split(";"):
         if "=" in entry:
@@ -49,10 +49,10 @@ def construct_header(args):
         for line in open(vcf):
             if first:
                 if "source=" in line:
-                    print line.strip()
+                    print (line.strip())
                     continue
                 if "##file" in line:
-                    print line.strip()
+                    print (line.strip())
                     continue
                 if("#CHROM\tPOS" in line):
                     columns=line.strip()
@@ -90,7 +90,7 @@ def construct_header(args):
     del header["INFO"]
     #print contigs according to the input order
     if reference != "":
-        print reference.strip()
+        print (reference.strip())
     for entry in header["CONTIGS"]:
         print(entry.strip())
     del header["CONTIGS"]
@@ -114,7 +114,7 @@ def construct_header(args):
         print(subheader[entry].strip())
 
     print("##INFO=<ID=SVID,Number=1,Type=String,Description=\"The variant IDs of the replaced SV calls\">")
-    print columns
+    print (columns)
     return ()
 
 parser = argparse.ArgumentParser("""MobileAnn - Mobile element annotation""", add_help=False)
@@ -158,9 +158,9 @@ if args.me_annotate:
             if "CHROM" in line:
                 print ("##INFO=<ID={},Number=1,Type=Integer,Description=\"The number of occurances of the event in the database\">".format(args.occ_tag))
                 print ("##INFO=<ID={},Number=1,Type=Float,Description=\"The frequency of the event in the database\">".format(args.frq_tag))
-                print line.strip()
+                print (line.strip())
             else:
-                print line.strip()
+                print (line.strip())
             continue
 
         frequency=0
@@ -177,7 +177,7 @@ if args.me_annotate:
                 frequency=frq
 
         content[7]+=";{}={};{}={}".format(args.occ_tag,count,args.frq_tag,frequency)
-        print "\t".join(content)
+        print ("\t".join(content))
 
 
         
@@ -200,9 +200,9 @@ elif args.frq:
             if "CHROM" in line:
                 print ("##INFO=<ID={},Number=1,Type=Integer,Description=\"The number of occurances of the event in the database\">".format(args.occ_tag))
                 print ("##INFO=<ID={},Number=1,Type=Float,Description=\"The frequency of the event in the database\">".format(args.frq_tag))
-                print line.strip()
+                print (line.strip())
             else:
-                print line.strip()
+                print (line.strip())
             continue
 
 
@@ -223,13 +223,13 @@ elif args.frq:
                    pass
                 elif "1/1" in content[i]:
                    OCC+=2
-		else:
+                else:
                    OCC+=1
 
         if samples:
             FRQ=OCC/float(samples)
         content[7]+=";{}={};{}={}".format(args.occ_tag,OCC,args.frq_tag,round(FRQ,4))
-        print "\t".join(content)
+        print ("\t".join(content))
 
 elif args.sv_annotate:
     parser = argparse.ArgumentParser("""MobileAnn - Mobile element annotation""")
@@ -380,13 +380,13 @@ elif args.sv_annotate:
     for chromosome in contig_order:
         for variant in sorted(variants[chromosome], key=lambda x: x[1]):
             variant[1]=str(variant[1])
-            print "\t".join(variant)
+            print ("\t".join(variant))
 
 else:
-    print "Choose a module to generate a help message:"
-    print "MobileAnn.py --sv_annotate"
-    print "MobileAnn.py --me_annotate"
-    print "MobileAnn.py --frq"
+    print ("Choose a module to generate a help message:")
+    print ("MobileAnn.py --sv_annotate")
+    print ("MobileAnn.py --me_annotate")
+    print ("MobileAnn.py --frq")
 
 
 

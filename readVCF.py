@@ -56,9 +56,9 @@ def readVCFLine(line):
         if "END" in description:
             posB=int(description["END"]);
         elif "SVLEN" in description:
-            posB=posA+int(description["SVLEN"]);
+            posB=posA+abs(int(description["SVLEN"]));
         else:
-            print line
+            print (line)
         #sometimes the fermikit intra chromosomal events are inverted i.e the end pos is a lower position than the start pos
         if(posB < posA):
             tmp=posB
