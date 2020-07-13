@@ -258,8 +258,8 @@ elif args.sv_annotate:
                     
         chrA, posA, chrB, posB,event_type,INFO,format = readVCF.readVCFLine(line)
     
-        if not chrA in contig_order:
-            contig_order.append(chrA)
+        if not line.split()[0] in contig_order:
+            contig_order.append(line.split()[0])
     
         sv_pos.append([posA,posB])
         sv_chr.append([chrA,chrB])
@@ -373,8 +373,8 @@ elif args.sv_annotate:
             content=sv_lines[i].split()
             if not content[0] in variants:
                 variants[content[0]]=[]
-        content[1]=int(content[1])
-        variants[content[0]].append(content)
+            content[1]=int(content[1])
+            variants[content[0]].append(content)
     
     #print sorted calls
     for chromosome in contig_order:
